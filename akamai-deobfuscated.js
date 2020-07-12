@@ -729,21 +729,21 @@ var _cf = _cf || [],
                 }
             return !1
         },
-        bpd: function (abckcookie) {
+        bpd: function () {
             bmak.sd_debug("<bpd>");
             var t = 0;
             try {
                 t = bmak.get_cf_date();
                 var a = bmak.updatet(),
                     e = "3";
-                bmak.ckie && (e = abckcookie);
+                bmak.ckie && (e = bmak.get_cookie());
                 var n = bmak.gd(),
                     o = window.DeviceOrientationEvent ? "do_en" : "do_dis",
                     m = window.DeviceMotionEvent ? "dm_en" : "dm_dis",
                     r = window.TouchEvent ? "t_en" : "t_dis",
                     i = o + "," + m + "," + r,
-                    c = "0,0,0,0,"+parseInt(Math.random()*2600)+","+parseInt(Math.random()*580)+",0;",
-                    b = "https://www.footlocker.com/",
+                    c = bmak.getforminfo(),
+                    b = bmak.getdurl(),
                     d = bmak.aj_type + "," + bmak.aj_indx;
                 !bmak.fpcf.fpValCalculated && (0 == bmak.js_post || bmak.aj_indx > 0) && bmak.fpcf.fpVal();
                 var k = bmak.ke_vel + bmak.me_vel + bmak.doe_vel + bmak.dme_vel + bmak.te_vel + bmak.pe_vel,
@@ -757,7 +757,7 @@ var _cf = _cf || [],
                     h = v.join(","),
                     g = "" + bmak.ab(bmak.fpcf.fpValstr);
                 bmak.np();
-                var w = "0,0,0,0,1,0,0",
+                var w = bmak.sed(),
                     y = bmak.mn_get_current_challenges(),
                     C = "",
                     j = "",
