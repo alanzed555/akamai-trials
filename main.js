@@ -1,78 +1,135 @@
 const electron = require('electron')
-const remote = require('electron').remote
-const { app, BrowserWindow, protocol, net} = electron;
+const { app, BrowserWindow, protocol, net } = electron;
 const fs = require('fs');
+const moment = require('moment');
 const express = require('express');
 const bodyParser = require('body-parser');
 const { performance } = require('perf_hooks');
-const path = require('path')
-const url = require('url')
+const request = require('request-promise');
+const crypto = require("crypto");
+const SocksProxyAgent = require('socks-proxy-agent');
 var util = require('util');
 
+var expressApp, bankExpressApp, bankServer;
+
+var captchaBank = [];
+
+function sleep(ms) {
+	return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 app.on('ready', () => {
-	initwindow();
-    initticketserver();
+	initCaptchaWindow();
 })
 
-var bwin
-
-async function initwindow() {
-	 bwin = new BrowserWindow({
-		width: 1366,
-		height: 728,
-		show: false,
+async function initCaptchaWindow() {
+	captchaWindow = new BrowserWindow({
+		width: 480,
+		height: 680,
 			webPreferences: {
-			    nodeIntegration:true,
 				allowRunningInsecureContent: true
 			}
 	})
 
-	protocol.interceptFileProtocol('file', (request, callback) => {
-    const url = request.url.substr(7)    /* all urls start with 'file://' */
-    callback({ path: path.normalize(`${__dirname}/${url}`) })
-  }, (err) => {
-    if (err) console.error('Failed to register protocol')
-  })
+	SetupIntercept();
 
-	bwin.loadURL(url.format({
-    pathname: 'index.html',    /* Attention here: origin is path.join(__dirname, 'index.html') */
-    protocol: 'file',
-    slashes: true
-  }))
-
-
-	bwin.on('close', function(e){
-		window = null;
+	captchaWindow.loadURL('https://accounts.google.com');
+	
+	await sleep(1000)
+	
+	captchaWindow.on('close', function(e){
+		captchaWindow = null;
 	});
 
+	captchaWindow.webContents.session.webRequest.onBeforeRequest({urls: ['https://myaccount.google.com/*']}, (details, callback) => {
+		callback({redirectURL: 'http://supremenewyork.com/'})
+	})
 };
 
-function callAgent(args) {
-            return new Promise(resolve => {
-                bwin.webContents.send('bpd',args);
-                electron.ipcMain.on('bpd-reply', (event, result) => {
-                    resolve(result);
-                })
-            });
-        }
+function SetupIntercept() {
+	protocol.interceptBufferProtocol('http', (req, callback) => {
+		if(req.url == 'http://supremenewyork.com/') {
+			fs.readFile(__dirname + '/captcha.html', 'utf8', function(err, html){
+				callback({mimeType: 'text/html', data: Buffer.from(html)});
+			});
+		}else{
+			const request = net.request(req)
+			request.on('response', res => {
+				const chunks = []
 
-function initticketserver(){
-    bankExpressApp = express();
-    let port = '7000';
-    let address = '209.182.216.166';
+				res.on('data', chunk => {
+					chunks.push(Buffer.from(chunk))
+				})
 
-    console.log('Bank server listening on port: ' + port);
-    bankExpressApp.set('port', port);
-    bankExpressApp.set('address', address);
-    bankExpressApp.use(bodyParser.json());
-    bankExpressApp.use(bodyParser.urlencoded({ extended: true }));
+				res.on('end', async () => {
+					const file = Buffer.concat(chunks)
+					callback(file)
+				})
+			})
 
-    bankExpressApp.get('/akamai', async function(req, res) {
-        let foo = await callAgent([url.parse(req.url,true).query.abck, url.parse(req.url,true).query.url])
-        res.send(String(foo));
-    });
+			if (req.uploadData) {
+				req.uploadData.forEach(part => {
+					if (part.bytes) {
+						request.write(part.bytes)
+					} else if (part.file) {
+						request.write(readFileSync(part.file))
+					}
+				})
+			}
 
-    bankServer = bankExpressApp.listen(bankExpressApp.get('port'), bankExpressApp.get('address'));
-}
+			request.end()
+		}
+	})
+};
+
+electron.ipcMain.on('openCapWindow', function(event, args) {
+    initCaptchaWindow();
+});
+
+electron.ipcMain.on('sendCaptcha', function(event, token) {
+
+	captchaBank.push({
+	  token: token,
+	  timestamp: moment(),
+	  host: 'http://supremenewyork.com/',
+	  sitekey: '6LeWwRkUAAAAAOBsau7KpuC9AV-6J8mhw4AjC3Xz'
+	})
+});
+
+setInterval(function(){
+	for (var i = 0; i < captchaBank.length; i++) {
+
+  	if (moment().diff(moment(captchaBank[i].timestamp), 'seconds') > 110) {
+		console.log('Removing Expired Captcha Token')
+		captchaBank.splice(0,1)
+
+	  }
+	}
+}, 1000);
+
+function initBankServer() {
+	bankExpressApp = express()
+
+	let port = '8000';
+	let address = '127.0.0.1';
+
+	console.log('Bank server listening on port: ' + port);
+	bankExpressApp.set('port', port);
+	bankExpressApp.set('address', address);
+	bankExpressApp.use(bodyParser.json());
+	bankExpressApp.use(bodyParser.urlencoded({ extended: true }));
+
+	bankExpressApp.get('/trigger', function(req, res) {
+		initCaptchaWindow();
+	});
+
+	bankExpressApp.get('/fetch', function(req, res) {
+		return res.json(captchaBank),
+		captchaBank.splice(0,1);
+	});
 
 
+	bankServer = bankExpressApp.listen(bankExpressApp.get('port'), bankExpressApp.get('address'));
+	}
+
+initBankServer();
