@@ -9,43 +9,48 @@ const adyenEncrypt = require('node-adyen-encrypt')(18);
 var util = require('util');
 var page;
 const page_list = ['https://www.footlocker.com/product/model/starter-sweatshirt-womens/318828.html','https://www.footlocker.com/product/model/starter-sweatshirt-womens/318828.html','https://www.footlocker.com/product/model/nike-satin-hook-t-shirt-mens/323947.html','https://www.footlocker.com/product/model/reebok-vector-crew-mens/318979.html','https://www.footlocker.com/product/model/converse-all-star-ox-boys-grade-school/191450.htm','https://www.footlocker.com/product/model/converse-all-star-ox-womens/149982.html','https://www.footlocker.com/product/model/nike-air-force-1-low-boys-grade-school/100214.html','https://www.footlocker.com/product/nike-air-fear-of-god-moc-mens/M8086200.html', 'https://footlocker.com', 'https://www.footlocker.com/product/nike-lebron-17-low-mens/D5007101.html']
+const string_list = ['fear of god', 'air max', 'air force 1', 'sweater', 'vans', 'jordan 1', 'jordan 3', 'jordan 4', 'jordan 11']
+var cookie_bank = []
 
-puppeteer.launch({ headless: true, args: [`--window-size=1366,768`] }).then(async browser => {
+//, '--proxy-server=204.150.214.210:65016'
+puppeteer.launch({ headless: true, args: ['--window-size=1366,768'] }).then(async browser => {
   page = await browser.newPage();
   page.setViewport({width: 1366, height:728})
   await page.goto('https://footlocker.com');
   await page.evaluate(()=>{
-    bmak.fpcf.fpValstr = "1454252292;895908107;dis;,7,8;true;true;true;240;true;24;24;true;false;-1";
+//    bmak.fpcf.fpValstr = "1454252292;895908107;dis;,7,8;true;true;true;240;true;24;24;true;false;-1";
     window.innerHeight = 657;
     window.innerWidth = 1366;
 //    window.screen.height = 768;
   })
-  const cursor = ghostCursor.createCursor(page);
-    setInterval(async function(){
-    try{await cursor.move('body');
-    if(Math.random() > 0.85){await cursor.click();}
-    }catch(e){}}, 0.5)
+  const cursor = ghostCursor.createCursor(page)
+  setInterval(async function(){
+    try{
+        try{await cursor.move('main[id=main]')}catch(e){};
+        if(Math.random()>.9){
+                await page.evaluate(()=>{ $x('//*[@id="app"]/div/header/nav[2]/div[3]/button[1]/span')[0].click()});
+                await page.type('#input_search_query', string_list[parseInt(Math.random()*9)], {delay: 0});
+                await page.evaluate(()=>{$x('//*[@id="HeaderSearch"]/div[3]/button')[0].click()});
+                await new Promise(r => setTimeout(r, 1500));
+        }
+        if(Math.random() > 0.85){
+            await cursor.click();
+        }
+    }catch(e){};
+    check_cookies();
+    }, 500)
 })
 
-async function check_cookies(){
-    var tstart = 0;
-    while(true){
+async function check_cookies(link){
         var cookies = await page.cookies();
         for(i = 0; i < cookies.length; i++){
             if(cookies[i].name == '_abck'){
-                console.log(cookies[i].value);
-                if ((cookies[i].value.slice(-12).includes('=~') || cookies[i].value.slice(-12).includes('||')) && !cookies[i].value.slice(-12).includes('==')){
-                    return cookies[i].value;
+                if (!cookies[i].value.slice(-12).includes('==') && !cookie_bank.includes(cookies[i].value)){
+                     cookie_bank.push(cookies[i].value);
+                     console.log(cookie[i].value)
                 }
             }
         }
-        tstart ++;
-        if(tstart > 5){
-            await page.goto(page_list[parseInt(Math.random()*11)])
-            tstart = 0;
-        }
-        await new Promise(r => setTimeout(r, 2000));
-    }
 }
 
 async function abck(abckcookie, link, indx){
@@ -63,7 +68,8 @@ async function abck(abckcookie, link, indx){
         history.pushState({}, null, link);
         bmak.apicall_bm(bmak.cf_url, true, bmak.patp);
     }, link, indx);
-    return await check_cookies()
+    return await check_cookies(link);
+    return 'error'
 }
 
 async function sensor(abckcookie, link, indx){
@@ -76,9 +82,13 @@ async function sensor(abckcookie, link, indx){
           httpOnly: false,
           secure: true
         }
-
+    if(cookie_bank.length >0){
+        return {'type':'cookie', 'value': cookie_bank[0]},
+        cookie_bank.shift(),
+        console.log(cookie_bank)
+    }
     await page.setCookie(cookie);
-    return await page.evaluate((link, indx) => {
+    return {'type':'sensor','value': await page.evaluate((link, indx) => {
         history.pushState({}, null, link);
         bmak.cma(MouseEvent, 1);
         bmak.cdma(DeviceMotionEvent);
@@ -86,7 +96,7 @@ async function sensor(abckcookie, link, indx){
         bmak.aj_index = indx;
         bmak.bpd();
         return bmak.sensor_data;
-    }, link, indx);
+    }, link, indx)}
 }
 
 async function adyen_encrypt(adyenkey, card_num, card_month, card_year, card_cvv, card_name){
@@ -126,19 +136,25 @@ function initBankServer() {
 	bankExpressApp.use(bodyParser.urlencoded({ extended: true }));
 
 	bankExpressApp.get('/sensor', async function(req, res) {
+	    console.log('recieved');
 	    var forminf = url.parse(req.url, true).query;
-        res.send(await sensor(forminf.abck, forminf.url, forminf.indx));
+	    var return_data = await sensor(forminf.abck, forminf.url, forminf.indx);
+	    console.log(return_data)
+        res.send(return_data);
         res.end();
     });
 
     bankExpressApp.get('/akamai', async function(req, res){
+        console.log('recieved');
         var forminf = url.parse(req.url, true).query;
        res.send(await abck(forminf.abck, forminf.url, forminf.indx));
        res.end();
     });
 
     bankExpressApp.get('/alternatepage', async function(req, res){
-       await page.goto(page_list[parseInt(Math.random()*11)])
+       var new_link = page_list[parseInt(Math.random()*11)];
+       console.log(new_link);
+       await page.goto(new_link);
        res.send('reloaded');
        res.end();
     });
